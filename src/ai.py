@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from langchain_core.output_parsers import PydanticOutputParser
 from llm import stream_llm_with_instructor, run_llm_with_instructor
-from models import ChatResponse, ActionType, ActionCategory
+from models import ChatResponse
 from settings import settings
 from utils import extract_skill_from_action_type
 from db import get_skills_data_from_names
@@ -72,15 +72,30 @@ async def extract_metadata(chat_history: list[ChatResponse]):
         action_description: str = Field(
             description="A concise description of the action that the young person took (less than 50 words)"
         )
-        action_type: ActionType = Field(description="The type of the action")
-        action_category: ActionCategory = Field(
-            description="The category of the action"
+        action_type_index: int = Field(
+            description="The index in the list of action types that best describes the action"
+        )
+        action_category_index: int = Field(
+            description="The index in the list of action categories that best describes the action"
         )
 
     parser = PydanticOutputParser(pydantic_object=Output)
     format_instructions = parser.get_format_instructions()
 
-    system_prompt = f"""Extract the action type, action category, action title and action description from the given conversation history of a young person describing their actions to solve a local civic problem. Use the provided lists to identify the correct action type and category.\n\n# Steps\n\n1. **Review the Conversation:** Thoroughly read the conversation history to understand the actions the young person has described.\n2. **Identify Action Type:** Determine the action type from the conversation, ensuring it aligns with one of the listed action types. Focus on specific verbs or phrases that indicate the nature of the activity.\n3. **Identify Action Category:** Determine the action category based on the topic or area addressed in the conversation. Use the given list to find the most suitable category.\n4. **Ensure Uniqueness:** Each task should conclude with one unique action type and one unique action category.\n\n### Output format\n\n{format_instructions}"""
+    action_types = await get_event_types()
+    action_categories = await get_event_categories()
+
+    action_types_prompt = "\n".join(
+        [f"{index}: {action_type}" for index, action_type in enumerate(action_types)]
+    )
+    action_categories_prompt = "\n".join(
+        [
+            f"{index}: {action_category}"
+            for index, action_category in enumerate(action_categories)
+        ]
+    )
+
+    system_prompt = f"""Extract the action type, action category, action title and action description from the given conversation history of a young person describing their actions to solve a local civic problem. Use the provided lists to identify the correct action type and category.\n\n# Steps\n\n1. **Review the Conversation:** Thoroughly read the conversation history to understand the actions the young person has described.\n2. **Identify Action Type:** Determine the action type from the conversation, ensuring it aligns with one of the listed action types. Focus on specific verbs or phrases that indicate the nature of the activity.\n3. **Identify Action Category:** Determine the action category based on the topic or area addressed in the conversation. Use the given list to find the most suitable category.\n4. **Ensure Uniqueness:** Each task should conclude with one unique action type and one unique action category.\n5. For the action type, return the index of the action type in the list of action types. For the action category, return the index of the action category in the list of action categories.\n\nActionTypes:\n{action_types_prompt}\n\nActionCategories:\n{action_categories_prompt}\n\n### Output format\n\n{format_instructions}"""
 
     chat_history_prompt = transform_chat_history_to_prompt(chat_history)
 
@@ -105,7 +120,10 @@ async def extract_metadata(chat_history: list[ChatResponse]):
             max_completion_tokens=8096,
         )
 
-    skills = extract_skill_from_action_type(response.action_type)
+    action_type = action_types[response.action_type_index]
+    action_category = action_categories[response.action_category_index]
+
+    skills = extract_skill_from_action_type(action_type)
     skills = await get_skills_data_from_names(skills)
 
     class SkillRelevance(BaseModel):
@@ -163,7 +181,7 @@ async def extract_metadata(chat_history: list[ChatResponse]):
     return {
         "action_title": response.action_title,
         "action_description": response.action_description,
-        "action_type": response.action_type,
-        "action_category": response.action_category,
+        "action_type": action_type,
+        "action_category": action_category,
         "skills": skills,
     }

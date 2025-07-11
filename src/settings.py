@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     frappe_backend_base_url: str
     frappe_backend_client_id: str
     frappe_backend_client_secret: str
+    database_url: str
     env: str
 
     class Config:

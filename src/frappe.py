@@ -3,6 +3,40 @@ import json
 from settings import settings
 from db import get_action_for_user
 from fastapi import HTTPException
+from settings import settings
+import asyncpg
+
+
+async def get_db_connection():
+    conn = await asyncpg.connect(settings.database_url)
+    return conn
+
+
+async def get_event_types():
+    conn: asyncpg.Connection = await get_db_connection()
+
+    query = 'SELECT * from "tabEvent Type"'
+    rows = await conn.fetch(query)
+
+    return [row["name"] for row in rows]
+
+
+async def get_event_categories():
+    conn: asyncpg.Connection = await get_db_connection()
+
+    query = 'SELECT * from "tabEvent Category"'
+    rows = await conn.fetch(query)
+
+    return [row["name"] for row in rows]
+
+
+async def get_event_subcategories():
+    conn: asyncpg.Connection = await get_db_connection()
+
+    query = 'SELECT * from "tabEvent Sub Category"'
+    rows = await conn.fetch(query)
+
+    return [row["name"] for row in rows]
 
 
 def login_user(email: str, password: str):
